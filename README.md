@@ -1,4 +1,4 @@
-# Jazz Timer — installable timer app for Android & iPhone
+# Bathroom Timer — installable timer app for Android & iPhone
 
 A countdown timer with repeating interval alerts and a synthesized **smooth jazz
 trumpet** completion sound. It is built as a **PWA (Progressive Web App)**, so the
