@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Jazz Timer</title>
+
+  <!-- PWA / mobile install metadata -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A countdown timer with interval alerts and a smooth jazz trumpet completion sound." />
+
+  <!-- iOS (Safari) home-screen app support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Jazz Timer" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: rgba(15, 23, 42, 0.86);
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --danger: #fb7185;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --ring: rgba(56, 189, 248, 0.22);
+      --tap: 52px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      /* Avoid iOS text inflation in landscape */
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      /* Respect notches / home indicator when installed full-screen */
+      padding:
+        max(16px, env(safe-area-inset-top))
+        max(14px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(14px, env(safe-area-inset-left));
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent 32rem),
+        radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.18), transparent 28rem),
+        var(--bg);
+      background-attachment: fixed;
+      /* App-like touch behaviour: no pull-to-refresh bounce, no tap flash */
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    .app {
+      width: min(100%, 500px);
+      padding: clamp(16px, 4.5vw, 28px);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.7rem, 7vw, 3rem);
+      text-align: center;
+      letter-spacing: -0.05em;
+    }
+
+    .subtitle {
+      margin: 0 0 clamp(14px, 4vw, 24px);
+      color: var(--muted);
+      font-size: clamp(0.85rem, 3.4vw, 1rem);
+      text-align: center;
+    }
+
+    .timer-ring {
+      position: relative;
+      width: min(68vw, 260px);
+      aspect-ratio: 1;
+      margin: 0 auto clamp(16px, 4vw, 26px);
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent) var(--progress), var(--ring) 0deg);
+      transition: filter 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .timer-ring.alerting {
+      animation: alertPulse 0.7s ease-in-out infinite alternate;
+    }
+
+    @keyframes alertPulse {
+      from {
+        filter: brightness(1.25) saturate(1.2);
+        box-shadow: 0 0 28px rgba(56, 189, 248, 0.45), 0 0 70px rgba(34, 197, 94, 0.25);
+      }
+      to {
+        filter: brightness(2.3) saturate(1.9);
+        box-shadow: 0 0 45px rgba(56, 189, 248, 0.95), 0 0 110px rgba(34, 197, 94, 0.55);
+      }
+    }
+
+    .timer-ring::before {
+      content: "";
+      position: absolute;
+      inset: 14px;
+      border-radius: 50%;
+      background: #111827;
+      box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.32);
+    }
+
+    .time {
+      position: relative;
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(2.6rem, 13vw, 4.6rem);
+      font-weight: 800;
+      letter-spacing: -0.06em;
+    }
+
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .settings {
+      padding: clamp(12px, 3.5vw, 16px);
+      margin-bottom: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    .settings-title {
+      margin: 0 0 10px;
+      color: var(--text);
+      font-size: clamp(0.92rem, 3.6vw, 1rem);
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .interval-inputs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: clamp(0.76rem, 3vw, 0.85rem);
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: clamp(0.68rem, 2.8vw, 0.82rem);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    input {
+      width: 100%;
+      min-height: var(--tap);
+      padding: 12px 6px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 14px;
+      color: var(--text);
+      background: rgba(15, 23, 42, 0.6);
+      font-family: inherit;
+      font-weight: 700;
+      /* 16px minimum stops iOS Safari from zooming in on focus */
+      font-size: 16px;
+      text-align: center;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    .buttons, .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    button {
+      min-height: var(--tap);
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      color: #082f49;
+      background: var(--accent);
+      font-family: inherit;
+      font-size: clamp(0.9rem, 3.6vw, 1rem);
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    button:active { transform: scale(0.97); filter: brightness(1.1); }
+    @media (hover: hover) {
+      button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    }
+
+    button.secondary { color: var(--text); background: rgba(148, 163, 184, 0.2); }
+    button.success { color: #052e16; background: var(--accent-2); }
+    button.danger { color: #4c0519; background: var(--danger); }
+    button.wide { flex: 1 1 100%; }
+
+    .presets { margin-top: 12px; }
+
+    .presets button {
+      flex: 1 1 0;
+      min-width: 68px;
+      padding: 10px 8px;
+      color: var(--text);
+      background: rgba(56, 189, 248, 0.14);
+      font-size: clamp(0.8rem, 3.2vw, 0.92rem);
+    }
+
+    .status {
+      min-height: 24px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: clamp(0.8rem, 3.2vw, 0.95rem);
+      line-height: 1.4;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .install-bar {
+      display: none;
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px dashed rgba(56, 189, 248, 0.45);
+      border-radius: 18px;
+      background: rgba(56, 189, 248, 0.08);
+      text-align: center;
+    }
+
+    .install-bar.visible { display: block; }
+
+    .install-bar p {
+      margin: 0 0 10px;
+      color: var(--text);
+      font-size: clamp(0.78rem, 3vw, 0.88rem);
+      line-height: 1.45;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .timer-ring.alerting { animation-duration: 1.4s; }
+      button { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Timer application">
+    <h1>Jazz Timer</h1>
+    <p class="subtitle">Set a countdown and stay focused.</p>
+
+    <section class="timer-ring" id="ring" style="--progress: 0deg" aria-live="polite">
+      <div class="time" id="display">00:00</div>
+    </section>
+
+    <form class="inputs" id="timerForm" onsubmit="return false">
+      <label>Hours
+        <input id="hours" type="number" min="0" max="99" value="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+      </label>
+      <label>Minutes
+        <input id="minutes" type="number" min="0" max="59" value="5" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+      </label>
+      <label>Seconds
+        <input id="seconds" type="number" min="0" max="59" value="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+      </label>
+    </form>
+
+    <div class="presets" aria-label="Timer presets">
+      <button type="button" data-preset="60">1 min</button>
+      <button type="button" data-preset="300">5 min</button>
+      <button type="button" data-preset="600">10 min</button>
+      <button type="button" data-preset="1500">25 min</button>
+    </div>
+
+    <section class="settings" style="margin-top: 14px" aria-label="Completion sound interval settings">
+      <p class="settings-title">Completion sound interval</p>
+      <div class="interval-inputs">
+        <label>Hours
+          <input id="intervalHours" type="number" min="0" max="99" value="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+        </label>
+        <label>Minutes
+          <input id="intervalMinutes" type="number" min="0" max="59" value="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+        </label>
+        <label>Seconds
+          <input id="intervalSeconds" type="number" min="0" max="59" value="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" />
+        </label>
+      </div>
+      <div class="presets" aria-label="Interval presets">
+        <button type="button" data-interval="0">Off</button>
+        <button type="button" data-interval="60">1 min</button>
+        <button type="button" data-interval="300">5 min</button>
+        <button type="button" data-interval="600">10 min</button>
+      </div>
+      <p class="hint">Set an interval to make the completion sound ring repeatedly, for example every 10 minutes. Leave it at 0 to ring only when the timer ends.</p>
+      <p class="hint">🔊 Alerts are queued in advance, so the trumpet still plays when the screen is off or the app is in the background. Keep the app open (don't swipe it away) and turn off silent mode on iPhone.</p>
+    </section>
+
+    <div class="buttons">
+      <button id="startPause" class="success wide" type="button">Start</button>
+      <button id="reset" class="secondary" type="button">Reset</button>
+      <button id="clear" class="danger" type="button">Clear</button>
+      <button id="testSound" class="secondary" type="button">🎺 Test</button>
+    </div>
+
+    <p class="status" id="status">Ready</p>
+
+    <section class="install-bar" id="installBar" aria-label="Install app">
+      <p id="installText">Install Jazz Timer on your phone for a full-screen, offline app.</p>
+      <button id="installButton" type="button">Add to Home Screen</button>
+    </section>
+  </main>
+
+  <script>
+    const display = document.getElementById('display');
+    const ring = document.getElementById('ring');
+    const status = document.getElementById('status');
+    const startPause = document.getElementById('startPause');
+    const reset = document.getElementById('reset');
+    const clear = document.getElementById('clear');
+    const testSound = document.getElementById('testSound');
+    const installBar = document.getElementById('installBar');
+    const installText = document.getElementById('installText');
+    const installButton = document.getElementById('installButton');
+
+    const inputs = {
+      hours: document.getElementById('hours'),
+      minutes: document.getElementById('minutes'),
+      seconds: document.getElementById('seconds')
+    };
+    const intervalInputs = {
+      hours: document.getElementById('intervalHours'),
+      minutes: document.getElementById('intervalMinutes'),
+      seconds: document.getElementById('intervalSeconds')
+    };
+
+    const STORAGE_KEY = 'jazz-timer-state-v1';
+    const ALERT_SPACING_MS = 1400; // one full trumpet phrase + a short gap
+    const ALERT_SPACING = ALERT_SPACING_MS / 1000;
+    const INTERMEDIATE_RINGS = 6;
+
+    let duration = 5 * 60;      // seconds
+    let remaining = duration;   // seconds (displayed)
+    let deadline = null;        // epoch ms while running
+    let soundInterval = 0;      // seconds
+    let tickId = null;
+    let alarmIntervalId = null;
+    let audioContext = null;
+    let running = false;
+    let alerting = false;
+    let continuousAlerting = false;
+    let nextAlertElapsed = null;
+    let wakeLock = null;
+
+    /* ---------------------------------------------------------------
+       Input helpers
+    --------------------------------------------------------------- */
+    function clamp(value, min, max) {
+      return Math.min(Math.max(Number(value) || 0, min), max);
+    }
+
+    function readTimeInputs(inputSet) {
+      const hours = clamp(inputSet.hours.value, 0, 99);
+      const minutes = clamp(inputSet.minutes.value, 0, 59);
+      const seconds = clamp(inputSet.seconds.value, 0, 59);
+      inputSet.hours.value = hours;
+      inputSet.minutes.value = minutes;
+      inputSet.seconds.value = seconds;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    const readInputs = () => readTimeInputs(inputs);
+    const readIntervalInputs = () => readTimeInputs(intervalInputs);
+
+    function writeTimeInputs(inputSet, totalSeconds) {
+      inputSet.hours.value = Math.floor(totalSeconds / 3600);
+      inputSet.minutes.value = Math.floor((totalSeconds % 3600) / 60);
+      inputSet.seconds.value = totalSeconds % 60;
+    }
+
+    const writeInputs = (totalSeconds) => writeTimeInputs(inputs, totalSeconds);
+
+    function formatTime(totalSeconds) {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      const mm = String(m).padStart(2, '0');
+      const ss = String(s).padStart(2, '0');
+      return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+    }
+
+    function render() {
+      display.textContent = formatTime(remaining);
+      const elapsed = duration ? (duration - remaining) / duration : 0;
+      ring.style.setProperty('--progress', `${elapsed * 360}deg`);
+      document.title = running ? `${formatTime(remaining)} - Jazz Timer` : 'Jazz Timer';
+    }
+
+    /* ---------------------------------------------------------------
+       Audio: synthesized smooth-jazz trumpet
+
+       Screen-off / backgrounded playback is the tricky part. Phones freeze
+       page JavaScript when the screen sleeps, so a setInterval-driven sound
+       would never fire. Instead this app:
+         1. keeps a real audio session alive (iOS audioSession + a silent
+            looping media element + an inaudible keep-alive tone), and
+         2. pre-schedules every alert on the audio thread with exact
+            AudioContext timestamps, so the trumpet plays even while the
+            page's JavaScript is completely frozen.
+       Mobile browsers only allow audio that starts from a user gesture, so
+       the context is created/unlocked on first touch.
+    --------------------------------------------------------------- */
+    let phraseBuffer = null;         // one rendered trumpet phrase + trailing gap
+    let phraseBufferPromise = null;
+    let keepAlive = null;            // inaudible tone holding the audio session
+    let silentLoopEl = null;         // silent <audio> loop => background media
+    let scheduledSources = [];       // pre-scheduled alert audio
+    let scheduledSoundActive = false;
+    let scheduleAnchor = null;       // {epoch, ctxTime} for drift detection
+
+    function getAudioContext() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!audioContext) {
+        try {
+          audioContext = new Ctx();
+        } catch (err) {
+          return null;
+        }
+        // iOS 16.4+: declare this page as media playback so audio keeps
+        // running with the screen locked and ignores the silent switch.
+        if (navigator.audioSession) {
+          try { navigator.audioSession.type = 'playback'; } catch (err) { /* ignore */ }
+        }
+      }
+      if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+      return audioContext;
+    }
+
+    function unlockAudio() {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      // iOS needs an actual buffer played inside the gesture to unlock output.
+      try {
+        const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+      } catch (err) { /* ignore */ }
+      ensurePhraseBuffer();
+      // A run restored from storage could not arm audio without a gesture.
+      if (running && !scheduledSoundActive) armAudioForRun();
+    }
+
+    ['pointerdown', 'touchstart', 'keydown'].forEach(type => {
+      window.addEventListener(type, unlockAudio, { passive: true });
+    });
+
+    // A near-silent WAV loop: playing real media is what earns a page the
+    // right to keep making sound while backgrounded or with the screen off.
+    function makeSilentWavUrl(seconds = 2, sampleRate = 8000) {
+      const frames = seconds * sampleRate;
+      const total = 44 + frames * 2;
+      const buffer = new ArrayBuffer(total);
+      const view = new DataView(buffer);
+      const writeText = (offset, text) => {
+        for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+      };
+      writeText(0, 'RIFF');
+      view.setUint32(4, total - 8, true);
+      writeText(8, 'WAVE');
+      writeText(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeText(36, 'data');
+      view.setUint32(40, frames * 2, true);
+      // +-1 LSB dither: inaudible, but keeps the OS audio route open.
+      for (let i = 0; i < frames; i++) view.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
+      return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+    }
+
+    function startBackgroundAudio() {
+      const ctx = getAudioContext();
+
+      if (ctx && !keepAlive) {
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.value = 30;
+          gain.gain.value = 0.0008; // ~-62 dBFS: inaudible, keeps context live
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          keepAlive = { osc, gain };
+        } catch (err) { /* ignore */ }
+      }
+
+      if (!silentLoopEl) {
+        try {
+          silentLoopEl = new Audio(makeSilentWavUrl());
+          silentLoopEl.loop = true;
+          silentLoopEl.preload = 'auto';
+          silentLoopEl.playsInline = true;
+          silentLoopEl.setAttribute('playsinline', '');
+        } catch (err) { silentLoopEl = null; }
+      }
+      if (silentLoopEl) silentLoopEl.play().catch(() => {});
+
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Jazz Timer',
+            artist: 'Countdown running',
+            artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }]
+          });
+          navigator.mediaSession.playbackState = 'playing';
+        } catch (err) { /* ignore */ }
+      }
+    }
+
+    function stopBackgroundAudio() {
+      if (keepAlive) {
+        try { keepAlive.osc.stop(); } catch (err) { /* ignore */ }
+        try { keepAlive.gain.disconnect(); } catch (err) { /* ignore */ }
+        keepAlive = null;
+      }
+      if (silentLoopEl) {
+        try { silentLoopEl.pause(); } catch (err) { /* ignore */ }
+      }
+      if ('mediaSession' in navigator) {
+        try { navigator.mediaSession.playbackState = 'paused'; } catch (err) { /* ignore */ }
+      }
+    }
+
+    function playTrumpetNote(ctx, destination, startTime, freq, dur, { scoop = true, vibrato = true } = {}) {
+      const noteGain = ctx.createGain();
+
+      // Bell-formant chain: bandpass at the trumpet's resonance plus a
+      // presence peak, so the tone is warm but cuts through on a phone speaker.
+      const bodyFilter = ctx.createBiquadFilter();
+      bodyFilter.type = 'bandpass';
+      bodyFilter.frequency.value = 1400;
+      bodyFilter.Q.value = 1.1;
+
+      const brightener = ctx.createBiquadFilter();
+      brightener.type = 'peaking';
+      brightener.frequency.value = 2600;
+      brightener.Q.value = 2;
+      brightener.gain.value = 6;
+
+      noteGain.connect(bodyFilter);
+      bodyFilter.connect(brightener);
+      brightener.connect(destination);
+
+      // Brass "buzz": detuned sawtooth layers for richness and loudness.
+      [0, -6, 6].forEach((detuneCents, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.detune.setValueAtTime(detuneCents, startTime);
+
+        if (scoop) {
+          const scoopFreq = freq * Math.pow(2, -1 / 12);
+          osc.frequency.setValueAtTime(scoopFreq, startTime);
+          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.07);
+        } else {
+          osc.frequency.setValueAtTime(freq, startTime);
+        }
+
+        if (vibrato && dur > 0.35) {
+          const lfo = ctx.createOscillator();
+          const lfoGain = ctx.createGain();
+          lfo.type = 'sine';
+          lfo.frequency.value = 5.5;
+          lfoGain.gain.setValueAtTime(0, startTime);
+          lfoGain.gain.setValueAtTime(0, startTime + 0.18);
+          lfoGain.gain.linearRampToValueAtTime(freq * 0.012, startTime + 0.35);
+          lfo.connect(lfoGain);
+          lfoGain.connect(osc.frequency);
+          lfo.start(startTime);
+          lfo.stop(startTime + dur + 0.05);
+        }
+
+        const oscGain = ctx.createGain();
+        oscGain.gain.value = i === 0 ? 1 : 0.35;
+        osc.connect(oscGain);
+        oscGain.connect(noteGain);
+        osc.start(startTime);
+        osc.stop(startTime + dur + 0.05);
+      });
+
+      // Punchy attack, held sustain, smooth release.
+      const peak = 0.9;
+      noteGain.gain.setValueAtTime(0.0001, startTime);
+      noteGain.gain.exponentialRampToValueAtTime(peak, startTime + 0.05);
+      noteGain.gain.setValueAtTime(peak, startTime + Math.max(dur - 0.18, 0.06));
+      noteGain.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+    }
+
+    // A loud, short smooth-jazz trumpet riff: pickup note, sustained
+    // vibrato note, then a jazzy lift.
+    function buildPhrase(ctx, destination, startTime) {
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 0.9;
+
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.knee.value = 12;
+      compressor.ratio.value = 6;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
+      masterGain.connect(compressor);
+      compressor.connect(destination);
+
+      playTrumpetNote(ctx, masterGain, startTime, 392.00, 0.22, { scoop: false, vibrato: false });
+      playTrumpetNote(ctx, masterGain, startTime + 0.20, 466.16, 0.55, { scoop: true, vibrato: true });
+      playTrumpetNote(ctx, masterGain, startTime + 0.72, 523.25, 0.30, { scoop: true, vibrato: false });
+    }
+
+    // Render the phrase once into an AudioBuffer (phrase + trailing gap, so a
+    // looping source repeats it at the right spacing). A buffer is what lets
+    // us hand the whole alert schedule to the audio thread up front.
+    function ensurePhraseBuffer() {
+      if (phraseBuffer) return Promise.resolve(phraseBuffer);
+      if (phraseBufferPromise) return phraseBufferPromise;
+
+      const ctx = getAudioContext();
+      const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!ctx || !Offline) return Promise.resolve(null);
+
+      let offline;
+      try {
+        offline = new Offline(1, Math.ceil(ALERT_SPACING * ctx.sampleRate), ctx.sampleRate);
+      } catch (err) {
+        return Promise.resolve(null);
+      }
+
+      buildPhrase(offline, offline.destination, 0);
+
+      // Older Safari resolves via oncomplete rather than a promise.
+      const viaEvent = new Promise(resolve => {
+        offline.oncomplete = event => resolve(event.renderedBuffer);
+      });
+      let returned;
+      try {
+        returned = offline.startRendering();
+      } catch (err) {
+        return Promise.resolve(null);
+      }
+
+      phraseBufferPromise = (returned && typeof returned.then === 'function' ? returned : viaEvent)
+        .then(buffer => {
+          phraseBuffer = buffer;
+          return buffer;
+        })
+        .catch(() => null);
+
+      return phraseBufferPromise;
+    }
+
+    // Play the phrase right now (Test button, and the foreground fallback).
+    function playPhrase() {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      if (phraseBuffer) {
+        try {
+          const source = ctx.createBufferSource();
+          source.buffer = phraseBuffer;
+          source.connect(ctx.destination);
+          source.start();
+          return;
+        } catch (err) { /* fall through to live synthesis */ }
+      }
+      buildPhrase(ctx, ctx.destination, ctx.currentTime);
+      ensurePhraseBuffer();
+    }
+
+    function buzz(pattern) {
+      // Android supports vibration; iOS Safari ignores it, hence sound + blink.
+      if (navigator.vibrate) {
+        try { navigator.vibrate(pattern); } catch (err) { /* ignore */ }
+      }
+    }
+
+    function ringOnce() {
+      playPhrase();
+      buzz([0, 120, 80, 220]);
+    }
+
+    /* ---------------------------------------------------------------
+       Pre-scheduled alerts — the key to screen-off playback.
+       Every alert for the whole run is queued on the audio thread with an
+       exact AudioContext timestamp, so it fires even if page JavaScript is
+       frozen by the OS. `repeats: Infinity` loops until it is cancelled.
+    --------------------------------------------------------------- */
+    function cancelScheduledSound() {
+      scheduledSources.forEach(source => {
+        try { source.stop(); } catch (err) { /* already finished */ }
+        try { source.disconnect(); } catch (err) { /* ignore */ }
+      });
+      scheduledSources = [];
+      scheduledSoundActive = false;
+      scheduleAnchor = null;
+    }
+
+    // How far the audio clock has slipped from wall-clock time since the
+    // schedule was built (grows while the OS suspends the audio context).
+    function audioScheduleDrift(ctx) {
+      if (!scheduleAnchor || !ctx) return Infinity;
+      const wall = (Date.now() - scheduleAnchor.epoch) / 1000;
+      const audio = ctx.currentTime - scheduleAnchor.ctxTime;
+      return Math.abs(wall - audio);
+    }
+
+    function scheduleSource(ctx, buffer, when, repeats) {
+      const at = Math.max(when, ctx.currentTime);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      if (repeats > 1) {
+        source.loop = true;
+        source.loopStart = 0;
+        source.loopEnd = buffer.duration;
+      }
+      source.connect(ctx.destination);
+      source.start(at);
+      if (repeats !== Infinity) source.stop(at + repeats * buffer.duration);
+      scheduledSources.push(source);
+    }
+
+    async function scheduleAlertAudio() {
+      const ctx = getAudioContext();
+      if (!ctx || !running || deadline === null) return;
+
+      const buffer = await ensurePhraseBuffer();
+      // State may have changed while the phrase rendered.
+      if (!buffer || !running || deadline === null) return;
+
+      cancelScheduledSound();
+
+      const nowEpoch = Date.now();
+      const base = ctx.currentTime;
+      const at = epoch => base + (epoch - nowEpoch) / 1000;
+
+      // Intermediate intervals: ring a fixed number of times, then stop.
+      if (soundInterval > 0) {
+        for (let elapsed = soundInterval; elapsed < duration; elapsed += soundInterval) {
+          const epoch = deadline - (duration - elapsed) * 1000;
+          if (epoch <= nowEpoch + 50) continue; // already passed
+          scheduleSource(ctx, buffer, at(epoch), INTERMEDIATE_RINGS);
+        }
+      }
+
+      // Final interval: rings forever until Reset/Clear cancels it.
+      scheduleSource(ctx, buffer, at(deadline), Infinity);
+      scheduledSoundActive = true;
+      scheduleAnchor = { epoch: nowEpoch, ctxTime: base };
+    }
+
+    // Arm background audio + scheduling for the current run.
+    function armAudioForRun() {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      startBackgroundAudio();
+      if (ctx.state === 'running') {
+        scheduleAlertAudio();
+      } else {
+        ctx.resume().then(scheduleAlertAudio).catch(() => {});
+      }
+    }
+
+    /* ---------------------------------------------------------------
+       Screen wake lock — keeps a phone awake while counting down
+    --------------------------------------------------------------- */
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator) || wakeLock) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (err) {
+        wakeLock = null;
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+       Alerts
+    --------------------------------------------------------------- */
+    // One "beat" of an alert. When the run's audio is already queued on the
+    // audio thread, the sound is coming from there — so only do the visuals
+    // and vibration here, to avoid playing the phrase twice.
+    function alertPulse() {
+      if (!scheduledSoundActive) playPhrase();
+      buzz([0, 120, 80, 220]);
+    }
+
+    function startAlert(message, continuous = false) {
+      stopAlert();
+      alerting = true;
+      continuousAlerting = continuous;
+      ring.classList.add('alerting');
+      alertPulse();
+
+      if (continuous) {
+        alarmIntervalId = setInterval(alertPulse, ALERT_SPACING_MS);
+        status.textContent = `${message} Press Reset or Clear before starting again.`;
+        requestWakeLock();
+        saveState();
+        return;
+      }
+
+      let ringsPlayed = 1;
+      status.textContent = `${message} Alert will ring ${INTERMEDIATE_RINGS} times.`;
+      alarmIntervalId = setInterval(() => {
+        ringsPlayed += 1;
+        alertPulse();
+        if (ringsPlayed >= INTERMEDIATE_RINGS) {
+          stopAlert();
+          if (running) status.textContent = 'Running';
+        }
+      }, ALERT_SPACING_MS);
+    }
+
+    function stopAlert() {
+      clearInterval(alarmIntervalId);
+      alarmIntervalId = null;
+      alerting = false;
+      continuousAlerting = false;
+      ring.classList.remove('alerting');
+      buzz(0);
+    }
+
+    /* ---------------------------------------------------------------
+       Timer core — driven by wall-clock deadlines so it stays accurate
+       when a phone throttles timers or the screen turns off.
+    --------------------------------------------------------------- */
+    function stopTicking() {
+      clearInterval(tickId);
+      tickId = null;
+    }
+
+    function stopTimer(message = 'Paused') {
+      stopTicking();
+      running = false;
+      deadline = null;
+      startPause.textContent = 'Start';
+      startPause.classList.add('success');
+      status.textContent = message;
+      releaseWakeLock();
+      // Pausing/resetting must also drop any alerts queued on the audio
+      // thread, otherwise they would still fire at their old times.
+      cancelScheduledSound();
+      stopBackgroundAudio();
+      render();
+      saveState();
+    }
+
+    function resetAlertSchedule() {
+      soundInterval = readIntervalInputs();
+      nextAlertElapsed = soundInterval > 0 ? soundInterval : null;
+    }
+
+    function finishTimer() {
+      stopTicking();
+      running = false;
+      deadline = null;
+      startPause.textContent = 'Start';
+      startPause.classList.add('success');
+      remaining = 0;
+      render();
+      startAlert('Final interval reached. Time is up!', true);
+    }
+
+    function checkIntervalAlert() {
+      if (!soundInterval || nextAlertElapsed === null) return;
+      const elapsed = duration - remaining;
+      if (elapsed >= nextAlertElapsed) {
+        const hitTime = nextAlertElapsed;
+        const isLastInterval = hitTime >= duration;
+        while (nextAlertElapsed !== null && nextAlertElapsed <= elapsed) {
+          nextAlertElapsed += soundInterval;
+          if (nextAlertElapsed > duration) nextAlertElapsed = null;
+        }
+        if (!isLastInterval) {
+          startAlert(`Completion sound interval reached at ${formatTime(hitTime)}.`, false);
+        }
+      }
+    }
+
+    function tick() {
+      if (!running || deadline === null) return;
+      const msLeft = deadline - Date.now();
+      const secondsLeft = Math.max(0, Math.ceil(msLeft / 1000));
+
+      if (secondsLeft === remaining && msLeft > 0) return; // nothing changed
+      remaining = secondsLeft;
+
+      checkIntervalAlert();
+
+      if (msLeft <= 0) {
+        finishTimer();
+        saveState();
+      } else {
+        render();
+      }
+    }
+
+    function startTimer() {
+      if (continuousAlerting) {
+        status.textContent = 'Press Reset or Clear to stop the final alert before starting again.';
+        return;
+      }
+
+      if (!running) {
+        if (remaining <= 0 || remaining === duration) {
+          duration = readInputs();
+          remaining = duration;
+          resetAlertSchedule();
+        }
+        if (duration <= 0) {
+          status.textContent = 'Choose a time first.';
+          return;
+        }
+        running = true;
+        deadline = Date.now() + remaining * 1000;
+        startPause.textContent = 'Pause';
+        startPause.classList.remove('success');
+        status.textContent = 'Running';
+        stopTicking();
+        tickId = setInterval(tick, 200);
+        requestWakeLock();
+        // Queue the whole run's audio now, while we still have a user gesture:
+        // this is what makes the trumpet play with the screen off.
+        armAudioForRun();
+        render();
+        saveState();
+      } else {
+        stopTimer();
+      }
+    }
+
+    /* ---------------------------------------------------------------
+       Persistence — a phone can suspend or kill the app at any time
+    --------------------------------------------------------------- */
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          duration,
+          remaining,
+          deadline,
+          running,
+          soundInterval,
+          nextAlertElapsed,
+          continuousAlerting
+        }));
+      } catch (err) { /* storage may be unavailable in private mode */ }
+    }
+
+    function restoreState() {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      } catch (err) {
+        saved = null;
+      }
+      if (!saved || typeof saved.duration !== 'number') return false;
+
+      duration = saved.duration;
+      soundInterval = saved.soundInterval || 0;
+      nextAlertElapsed = saved.nextAlertElapsed ?? null;
+      writeInputs(duration);
+      writeTimeInputs(intervalInputs, soundInterval);
+
+      if (saved.running && saved.deadline) {
+        const msLeft = saved.deadline - Date.now();
+        if (msLeft > 0) {
+          remaining = Math.ceil(msLeft / 1000);
+          deadline = saved.deadline;
+          running = true;
+          startPause.textContent = 'Pause';
+          startPause.classList.remove('success');
+          status.textContent = 'Running';
+          tickId = setInterval(tick, 200);
+          requestWakeLock();
+          // Browsers block audio until a gesture, so this may only succeed
+          // after the first tap; unlockAudio() retries it then.
+          armAudioForRun();
+          render();
+          return true;
+        }
+        // Timer expired while the app was closed: resume the final alert.
+        remaining = 0;
+        render();
+        startAlert('Final interval reached. Time is up!', true);
+        status.textContent = 'Time is up! Tap the screen if muted, then press Reset or Clear.';
+        return true;
+      }
+
+      if (saved.continuousAlerting) {
+        remaining = 0;
+        render();
+        startAlert('Final interval reached. Time is up!', true);
+        return true;
+      }
+
+      remaining = typeof saved.remaining === 'number' ? saved.remaining : duration;
+      render();
+      status.textContent = 'Ready';
+      return true;
+    }
+
+    /* ---------------------------------------------------------------
+       Controls
+    --------------------------------------------------------------- */
+    startPause.addEventListener('click', startTimer);
+    testSound.addEventListener('click', ringOnce);
+
+    reset.addEventListener('click', () => {
+      stopAlert();
+      stopTimer('Reset');
+      duration = readInputs() || duration;
+      remaining = duration;
+      resetAlertSchedule();
+      render();
+      saveState();
+    });
+
+    clear.addEventListener('click', () => {
+      stopAlert();
+      stopTimer('Ready');
+      duration = 0;
+      remaining = 0;
+      soundInterval = 0;
+      nextAlertElapsed = null;
+      writeInputs(0);
+      writeTimeInputs(intervalInputs, 0);
+      render();
+      saveState();
+    });
+
+    Object.values(inputs).forEach(input => {
+      input.addEventListener('input', () => {
+        if (!running && !continuousAlerting) {
+          duration = readInputs();
+          remaining = duration;
+          resetAlertSchedule();
+          status.textContent = 'Ready';
+          render();
+          saveState();
+        }
+      });
+    });
+
+    Object.values(intervalInputs).forEach(input => {
+      input.addEventListener('input', () => {
+        if (!running) {
+          resetAlertSchedule();
+          status.textContent = soundInterval > 0
+            ? `Completion sound will ring every ${formatTime(soundInterval)}.`
+            : 'Completion sound will ring only when the timer ends.';
+          saveState();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(button => {
+      button.addEventListener('click', () => {
+        stopAlert();
+        stopTimer('Ready');
+        duration = Number(button.dataset.preset);
+        remaining = duration;
+        writeInputs(duration);
+        resetAlertSchedule();
+        render();
+        saveState();
+      });
+    });
+
+    document.querySelectorAll('[data-interval]').forEach(button => {
+      button.addEventListener('click', () => {
+        const seconds = Number(button.dataset.interval);
+        writeTimeInputs(intervalInputs, seconds);
+        resetAlertSchedule();
+        status.textContent = soundInterval > 0
+          ? `Completion sound will ring every ${formatTime(soundInterval)}.`
+          : 'Completion sound will ring only when the timer ends.';
+        saveState();
+      });
+    });
+
+    // Re-sync as soon as the app returns to the foreground.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') {
+        saveState();
+        return;
+      }
+      if (running) {
+        tick();
+        requestWakeLock();
+        // Re-align the queued audio only if it actually needs it, so we
+        // never cut an in-progress ring short just because you looked at
+        // the screen. The audio clock stalls while the OS suspends it.
+        if (running && (!scheduledSoundActive
+          || !audioContext
+          || audioContext.state !== 'running'
+          || audioScheduleDrift(audioContext) > 0.5)) {
+          armAudioForRun();
+        }
+      }
+    });
+    window.addEventListener('pagehide', saveState);
+
+    /* ---------------------------------------------------------------
+       Install experience (Android/Chrome prompt, iOS instructions)
+    --------------------------------------------------------------- */
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let installPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      installPrompt = event;
+      if (!isStandalone) installBar.classList.add('visible');
+    });
+
+    installButton.addEventListener('click', async () => {
+      if (!installPrompt) return;
+      installPrompt.prompt();
+      try { await installPrompt.userChoice; } catch (err) { /* ignore */ }
+      installPrompt = null;
+      installBar.classList.remove('visible');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installBar.classList.remove('visible');
+    });
+
+    if (isIos && !isStandalone) {
+      installText.textContent = 'To install on iPhone or iPad: tap the Share button in Safari, then choose "Add to Home Screen".';
+      installButton.style.display = 'none';
+      installBar.classList.add('visible');
+    }
+
+    /* ---------------------------------------------------------------
+       Service worker: offline support once installed
+    --------------------------------------------------------------- */
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {
+          /* offline support simply stays off */
+        });
+      });
+    }
+
+    /* ---------------------------------------------------------------
+       Boot
+    --------------------------------------------------------------- */
+    const presetParam = Number(new URLSearchParams(location.search).get('preset'));
+    if (presetParam > 0) {
+      duration = presetParam;
+      remaining = presetParam;
+      writeInputs(presetParam);
+      resetAlertSchedule();
+      render();
+    } else if (!restoreState()) {
+      resetAlertSchedule();
+      render();
+    }
+  </script>
+</body>
+</html>
