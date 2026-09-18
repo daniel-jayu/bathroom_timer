@@ -1,5 +1,11 @@
 # Bathroom Timer — installable timer app for Android & iPhone
 
+**▶ Live app — open this on your phone to install:
+https://daniel-jayu.github.io/bathroom_timer/**
+
+Served over HTTPS by GitHub Pages, so offline caching and home-screen install
+both work.
+
 A countdown timer with repeating interval alerts and a synthesized **smooth jazz
 trumpet** completion sound. It is built as a **PWA (Progressive Web App)**, so the
 same code installs to the home screen and runs full-screen and offline on both
@@ -19,14 +25,18 @@ same code installs to the home screen and runs full-screen and offline on both
 
 ## Run it locally
 
+Not needed for normal use — just open the live URL above. For development:
+
 ```bash
 node tools/serve.mjs 8099
 ```
 
 Then open `http://localhost:8099/`. The printed `Network:` URL is reachable from a
-phone on the same Wi-Fi.
+phone on the same Wi-Fi. Press `Ctrl+C` to stop the server.
 
 ## Install on a phone
+
+Open **https://daniel-jayu.github.io/bathroom_timer/** on the phone, then:
 
 ### Android (Chrome / Edge / Samsung Internet)
 1. Open the app URL.
@@ -40,11 +50,16 @@ phone on the same Wi-Fi.
 3. Choose **Add to Home Screen** → **Add**.
 
 > **HTTPS note:** offline caching (the service worker) only activates on
-> `https://` or `localhost`. Over a plain `http://192.168.x.x` LAN address the app
-> still works and still installs to the home screen — it just won't cache for
-> offline use. For full offline behaviour, host the folder on any static HTTPS
-> host (GitHub Pages, Netlify drop, Cloudflare Pages, Vercel) — just upload these
-> files as-is.
+> `https://` or `localhost`. The GitHub Pages URL above is HTTPS, so offline mode
+> works there. If you instead open a plain `http://192.168.x.x` LAN address, the
+> app still runs and still installs to the home screen — it just won't cache for
+> offline use.
+
+### Hosting
+
+This repo is published with **GitHub Pages** from `main` / root, with HTTPS
+enforced. Any push to `main` redeploys the live site automatically — no build step.
+To change it: *Settings → Pages*.
 
 ## How the alerts work
 
